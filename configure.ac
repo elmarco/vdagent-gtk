@@ -1,5 +1,5 @@
 AC_PREREQ(2.59)
-AC_INIT([spice-vdagent], [0.15.0])
+AC_INIT([spice-vdagent], [1.0pre])
 AC_CONFIG_SRCDIR([configure.ac])
 
 AM_CONFIG_HEADER([src/config.h])
@@ -76,8 +76,11 @@ AC_ARG_ENABLE([static-uinput],
               [enable_static_uinput="$enableval"],
               [enable_static_uinput="no"])
 
-PKG_CHECK_MODULES([GLIB2], [glib-2.0 >= 2.12])
-PKG_CHECK_MODULES(X, [xfixes xrandr >= 1.3 xinerama x11])
+GIO=gio-unix-2.0
+PKG_CHECK_MODULES([GLIB2], [glib-2.0 >= 2.26])
+PKG_CHECK_MODULES([GIO], [$GIO])
+PKG_CHECK_MODULES([GTK], [gtk+-3.0])
+
 PKG_CHECK_MODULES(SPICE, [spice-protocol >= 0.12.5])
 
 if test "$with_session_info" = "auto" || test "$with_session_info" = "systemd"; then

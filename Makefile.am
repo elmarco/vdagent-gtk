@@ -4,25 +4,16 @@ NULL =
 bin_PROGRAMS = src/spice-vdagent
 sbin_PROGRAMS = src/spice-vdagentd
 
-common_sources =				\
-	src/glib-compat.h			\
-	src/udscs.c				\
-	src/udscs.h				\
-	src/vdagentd-proto-strings.h		\
-	src/vdagentd-proto.h			\
-	$(NULL)
-
-src_spice_vdagent_CFLAGS = $(X_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) -I$(srcdir)/src
-src_spice_vdagent_LDADD = $(X_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS)
+src_spice_vdagent_CFLAGS = $(X_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(GIO_CFLAGS) $(GTK_CFLAGS) -I$(srcdir)/src -DG_LOG_DOMAIN=\"vdagent\"
+src_spice_vdagent_LDADD = $(X_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS) $(GIO_LIBS) $(GTK_LIBS)
 src_spice_vdagent_SOURCES =			\
 	$(common_sources)			\
-	src/vdagent/vdagent-file-xfers.c	\
-	src/vdagent/vdagent-file-xfers.h	\
-	src/vdagent/vdagent-x11-priv.h		\
-	src/vdagent/vdagent-x11-randr.c		\
-	src/vdagent/vdagent-x11.c		\
-	src/vdagent/vdagent-x11.h		\
+	src/vdagent/vdagent-clipboard.c		\
+	src/vdagent/vdagent-clipboard.h		\
 	src/vdagent/vdagent.c			\
+	src/vdagent/vdagent.h			\
+	src/vdagent/utils.c			\
+	src/vdagent/utils.h			\
 	$(NULL)
 
 src_spice_vdagentd_CFLAGS = $(DBUS_CFLAGS) $(LIBSYSTEMD_LOGIN_CFLAGS) \
@@ -30,7 +21,10 @@ src_spice_vdagentd_CFLAGS = $(DBUS_CFLAGS) $(LIBSYSTEMD_LOGIN_CFLAGS) \
 src_spice_vdagentd_LDADD = $(DBUS_LIBS) $(LIBSYSTEMD_LOGIN_LIBS) \
   $(PCIACCESS_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS) $(PIE_LDFLAGS)
 src_spice_vdagentd_SOURCES =			\
-	$(common_sources)			\
+	src/vdagentd/udscs.c			\
+	src/vdagentd/udscs.h			\
+	src/vdagentd/vdagentd-proto-strings.h	\
+	src/vdagentd/vdagentd-proto.h		\
 	src/vdagentd/session-info.h		\
 	src/vdagentd/vdagent-virtio-port.c	\
 	src/vdagentd/vdagent-virtio-port.h	\
@@ -91,7 +85,6 @@ manpage_DATA =					\
 	$(NULL)
 
 EXTRA_DIST =					\
-	README.RHEL-5				\
 	data/70-spice-vdagentd.rules		\
 	data/rsyslog.d/spice-vdagentd.conf	\
 	data/spice-vdagent.desktop		\
@@ -99,7 +92,6 @@ EXTRA_DIST =					\
 	data/spice-vdagentd.service		\
 	data/spice-vdagentd.target		\
 	data/tmpfiles.d/spice-vdagentd.conf	\
-	data/xorg.conf.RHEL-5			\
 	$(NULL)
 
 DISTCHECK_CONFIGURE_FLAGS =			\
