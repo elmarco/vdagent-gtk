@@ -4,47 +4,50 @@ NULL =
 bin_PROGRAMS = src/spice-vdagent
 sbin_PROGRAMS = src/spice-vdagentd
 
-src_spice_vdagent_CFLAGS = $(X_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS)
-src_spice_vdagent_LDADD = $(X_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS)
-src_spice_vdagent_SOURCES =			\
+common_sources =				\
 	src/glib-compat.h			\
 	src/udscs.c				\
 	src/udscs.h				\
-	src/vdagent-file-xfers.c		\
-	src/vdagent-file-xfers.h		\
-	src/vdagent-x11-priv.h			\
-	src/vdagent-x11-randr.c			\
-	src/vdagent-x11.c			\
-	src/vdagent-x11.h			\
-	src/vdagent.c				\
-	src/vdagentd-xorg-conf.h		\
+	src/vdagentd-proto-strings.h		\
+	src/vdagentd-proto.h			\
+	$(NULL)
+
+src_spice_vdagent_CFLAGS = $(X_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) -I$(srcdir)/src
+src_spice_vdagent_LDADD = $(X_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS)
+src_spice_vdagent_SOURCES =			\
+	$(common_sources)			\
+	src/vdagent/vdagent-file-xfers.c	\
+	src/vdagent/vdagent-file-xfers.h	\
+	src/vdagent/vdagent-x11-priv.h		\
+	src/vdagent/vdagent-x11-randr.c		\
+	src/vdagent/vdagent-x11.c		\
+	src/vdagent/vdagent-x11.h		\
+	src/vdagent/vdagent.c			\
 	$(NULL)
 
 src_spice_vdagentd_CFLAGS = $(DBUS_CFLAGS) $(LIBSYSTEMD_LOGIN_CFLAGS) \
-  $(PCIACCESS_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(PIE_CFLAGS)
+  $(PCIACCESS_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(PIE_CFLAGS) -I$(srcdir)/src
 src_spice_vdagentd_LDADD = $(DBUS_LIBS) $(LIBSYSTEMD_LOGIN_LIBS) \
   $(PCIACCESS_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS) $(PIE_LDFLAGS)
 src_spice_vdagentd_SOURCES =			\
-	src/session-info.h			\
-	src/udscs.c				\
-	src/udscs.h				\
-	src/vdagent-virtio-port.c		\
-	src/vdagent-virtio-port.h		\
-	src/vdagentd-proto-strings.h		\
-	src/vdagentd-proto.h			\
-	src/vdagentd-uinput.c			\
-	src/vdagentd-uinput.h			\
-	src/vdagentd-xorg-conf.c		\
-	src/vdagentd.c				\
+	$(common_sources)			\
+	src/vdagentd/session-info.h		\
+	src/vdagentd/vdagent-virtio-port.c	\
+	src/vdagentd/vdagent-virtio-port.h	\
+	src/vdagentd/vdagentd-uinput.c		\
+	src/vdagentd/vdagentd-uinput.h		\
+	src/vdagentd/vdagentd-xorg-conf.c	\
+	src/vdagentd/vdagentd-xorg-conf.h	\
+	src/vdagentd/vdagentd.c			\
 	$(NULL)
 
 if HAVE_CONSOLE_KIT
-src_spice_vdagentd_SOURCES += src/console-kit.c
+src_spice_vdagentd_SOURCES += src/vdagentd/console-kit.c
 else
 if HAVE_LIBSYSTEMD_LOGIN
-src_spice_vdagentd_SOURCES += src/systemd-login.c
+src_spice_vdagentd_SOURCES += src/vdagentd/systemd-login.c
 else
-src_spice_vdagentd_SOURCES += src/dummy-session-info.c
+src_spice_vdagentd_SOURCES += src/vdagentd/dummy-session-info.c
 endif
 endif
 
