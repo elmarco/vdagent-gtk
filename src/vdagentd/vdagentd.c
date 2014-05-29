@@ -8,12 +8,12 @@
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or   
+    the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of 
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the  
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
@@ -61,7 +61,6 @@ static int debug = 0;
 static int uinput_fake = 0;
 static struct udscs_server *server = NULL;
 static struct vdagent_virtio_port *virtio_port = NULL;
-static GHashTable *active_xfers = NULL;
 static struct session_info *session_info = NULL;
 static struct vdagentd_uinput *uinput = NULL;
 static VDAgentMonitorsConfig *mon_config = NULL;
@@ -93,13 +92,15 @@ static void send_capabilities(struct vdagent_virtio_port *vport,
 
     caps->request = request;
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MOUSE_STATE);
-    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MONITORS_CONFIG);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_REPLY);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_CLIPBOARD_BY_DEMAND);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_CLIPBOARD_SELECTION);
-    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_SPARSE_MONITORS_CONFIG);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_GUEST_LINEEND_LF);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MAX_CLIPBOARD);
+
+    /* this flags are required by clients to do auto-conf, but are legacy */
+    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MONITORS_CONFIG);
+    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_SPARSE_MONITORS_CONFIG);
 
     vdagent_virtio_port_write(vport, VDP_CLIENT_PORT,
                               VD_AGENT_ANNOUNCE_CAPABILITIES, 0,
@@ -234,64 +235,6 @@ static void do_client_clipboard(struct vdagent_virtio_port *vport,
                 data, size);
 }
 
-static void cancel_file_xfer(struct vdagent_virtio_port *vport,
-                             const char *msg, uint32_t id)
-{
-    VDAgentFileXferStatusMessage status = {
-        .id = id,
-        .result = VD_AGENT_FILE_XFER_STATUS_CANCELLED,
-    };
-    syslog(LOG_WARNING, msg, id);
-    if (vport)
-        vdagent_virtio_port_write(vport, VDP_CLIENT_PORT,
-                                  VD_AGENT_FILE_XFER_STATUS, 0,
-                                  (uint8_t *)&status, sizeof(status));
-}
-
-static void do_client_file_xfer(struct vdagent_virtio_port *vport,
-                                VDAgentMessage *message_header,
-                                uint8_t *data)
-{
-    uint32_t msg_type, id;
-    struct udscs_connection *conn;
-
-    switch (message_header->type) {
-    case VD_AGENT_FILE_XFER_START: {
-        VDAgentFileXferStartMessage *s = (VDAgentFileXferStartMessage *)data;
-        if (!active_session_conn) {
-            cancel_file_xfer(vport,
-               "Could not find an agent connnection belonging to the "
-               "active session, cancelling client file-xfer request %u",
-               s->id);
-            return;
-        }
-        udscs_write(active_session_conn, VDAGENTD_FILE_XFER_START, 0, 0,
-                    data, message_header->size);
-        return;
-    }
-    case VD_AGENT_FILE_XFER_STATUS: {
-        VDAgentFileXferStatusMessage *s = (VDAgentFileXferStatusMessage *)data;
-        msg_type = VDAGENTD_FILE_XFER_STATUS;
-        id = s->id;
-        break;
-    }
-    case VD_AGENT_FILE_XFER_DATA: {
-        VDAgentFileXferDataMessage *d = (VDAgentFileXferDataMessage *)data;
-        msg_type = VDAGENTD_FILE_XFER_DATA;
-        id = d->id;
-        break;
-    }
-    }
-
-    conn = g_hash_table_lookup(active_xfers, GUINT_TO_POINTER(id));
-    if (!conn) {
-        if (debug)
-            syslog(LOG_DEBUG, "Could not find file-xfer %u (cancelled?)", id);
-        return;
-    }
-    udscs_write(conn, msg_type, 0, 0, data, message_header->size);
-}
-
 int virtio_port_read_complete(
         struct vdagent_virtio_port *vport,
         int port_nr,
@@ -361,11 +304,6 @@ int virtio_port_read_complete(
             goto size_error;
         }
         do_client_clipboard(vport, message_header, data);
-        break;
-    case VD_AGENT_FILE_XFER_START:
-    case VD_AGENT_FILE_XFER_STATUS:
-    case VD_AGENT_FILE_XFER_DATA:
-        do_client_file_xfer(vport, message_header, data);
         break;
     case VD_AGENT_CLIENT_DISCONNECTED:
         vdagent_virtio_port_reset(vport, VDP_CLIENT_PORT);
@@ -620,17 +558,7 @@ void update_active_session_connection(struct udscs_connection *new_conn)
 
     release_clipboards();
 
-    check_xorg_resolution();    
-}
-
-gboolean remove_active_xfers(gpointer key, gpointer value, gpointer conn)
-{
-    if (value == conn) {
-        cancel_file_xfer(virtio_port, "Agent disc; cancelling file-xfer %u",
-                         GPOINTER_TO_UINT(key));
-        return 1;
-    } else
-        return 0;
+    check_xorg_resolution();
 }
 
 void agent_connect(struct udscs_connection *conn)
@@ -658,8 +586,6 @@ void agent_connect(struct udscs_connection *conn)
 void agent_disconnect(struct udscs_connection *conn)
 {
     struct agent_data *agent_data = udscs_get_user_data(conn);
-
-    g_hash_table_foreach_remove(active_xfers, remove_active_xfers, conn);
 
     free(agent_data->session);
     agent_data->session = NULL;
@@ -721,21 +647,6 @@ void agent_read_complete(struct udscs_connection **connp,
             return;
         }
         break;
-    case VDAGENTD_FILE_XFER_STATUS:{
-        VDAgentFileXferStatusMessage status;
-        status.id = header->arg1;
-        status.result = header->arg2;
-        vdagent_virtio_port_write(virtio_port, VDP_CLIENT_PORT,
-                                  VD_AGENT_FILE_XFER_STATUS, 0,
-                                  (uint8_t *)&status, sizeof(status));
-        if (status.result == VD_AGENT_FILE_XFER_STATUS_CAN_SEND_DATA)
-            g_hash_table_insert(active_xfers, GUINT_TO_POINTER(status.id),
-                                *connp);
-        else
-            g_hash_table_remove(active_xfers, GUINT_TO_POINTER(status.id));
-        break;
-    }
-
     default:
         syslog(LOG_ERR, "unknown message from vdagent: %u, ignoring",
                header->type);
@@ -945,7 +856,6 @@ int main(int argc, char *argv[])
     if (!session_info)
         syslog(LOG_WARNING, "no session info, max 1 session agent allowed");
 
-    active_xfers = g_hash_table_new(g_direct_hash, g_direct_equal);
     main_loop();
 
     release_clipboards();
