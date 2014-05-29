@@ -40,7 +40,6 @@
 #include "vdagentd-proto.h"
 #include "vdagentd-proto-strings.h"
 #include "vdagentd-uinput.h"
-#include "vdagentd-xorg-conf.h"
 #include "vdagent-virtio-port.h"
 #include "session-info.h"
 
@@ -130,8 +129,6 @@ static void do_client_monitors(struct vdagent_virtio_port *vport, int port_nr,
         syslog(LOG_ERR, "invalid message size for VDAgentMonitorsConfig");
         return;
     }
-
-    vdagentd_write_xorg_conf(new_monitors);
 
     if (!mon_config ||
             mon_config->num_of_monitors != new_monitors->num_of_monitors) {

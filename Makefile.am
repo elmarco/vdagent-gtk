@@ -30,8 +30,6 @@ src_spice_vdagentd_SOURCES =			\
 	src/vdagentd/vdagent-virtio-port.h	\
 	src/vdagentd/vdagentd-uinput.c		\
 	src/vdagentd/vdagentd-uinput.h		\
-	src/vdagentd/vdagentd-xorg-conf.c	\
-	src/vdagentd/vdagentd-xorg-conf.h	\
 	src/vdagentd/vdagentd.c			\
 	$(NULL)
 
