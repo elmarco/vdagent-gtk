@@ -42,6 +42,7 @@ static gboolean version_mismatch = FALSE;
 static gboolean quit = FALSE;
 
 static void read_new_message(SpiceVDAgent *agent);
+static void send_xorg_config(SpiceVDAgent *self);
 
 static void
 spice_vdagent_init(SpiceVDAgent *self)
@@ -51,12 +52,17 @@ spice_vdagent_init(SpiceVDAgent *self)
     vdagent_clipboard_init(self);
 
     self->outq = g_queue_new();
+
+    g_signal_connect_swapped(gdk_screen_get_default(), "monitors-changed",
+                             G_CALLBACK(send_xorg_config), self);
 }
 
 static void
 spice_vdagent_finalize(GObject *gobject)
 {
     SpiceVDAgent *self = SPICE_VDAGENT(gobject);
+
+    g_signal_handlers_disconnect_by_data(gdk_screen_get_default(), self);
 
     g_clear_object(&self->connection);
 #ifdef G_OS_UNIX
