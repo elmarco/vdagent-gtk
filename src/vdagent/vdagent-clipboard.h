@@ -26,11 +26,12 @@
 G_BEGIN_DECLS
 
 void vdagent_clipboard_init             (SpiceVDAgent *agent);
-void vdagent_clipboard_request          (SpiceVDAgent *agent, guint8 selection, guint32 type);
+void vdagent_clipboard_request          (SpiceVDAgent *agent, guint8 selection,
+                                         const gchar *type);
 void vdagent_clipboard_grab             (SpiceVDAgent *agent, guint8 selection,
-                                         guint32 *types, gsize ntypes);
-void vdagent_clipboard_data             (SpiceVDAgent *agent, guint8 selection, guint32 types,
-                                         gpointer data, gsize len);
+                                         const GStrv types);
+void vdagent_clipboard_data             (SpiceVDAgent *agent, guint8 selection,
+                                         const gchar *type, gpointer data, gsize len);
 void vdagent_clipboard_release          (SpiceVDAgent *agent, guint8 selection);
 void vdagent_clipboard_release_all      (SpiceVDAgent *agent);
 

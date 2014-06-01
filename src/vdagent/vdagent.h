@@ -84,7 +84,6 @@ typedef struct _SpiceVDAgent {
     struct {
         GMainLoop *loop;
         GtkSelectionData *selection_data;
-        guint info;
         gint selection;
     } clipboard_get;
 } SpiceVDAgent;

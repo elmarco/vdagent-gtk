@@ -97,6 +97,7 @@ static void send_capabilities(struct vdagent_virtio_port *vport,
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_CLIPBOARD_SELECTION);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_GUEST_LINEEND_LF);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MAX_CLIPBOARD);
+    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_ANY_SELECTION_TYPE);
 
     /* this flags are required by clients to do auto-conf, but are legacy */
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MONITORS_CONFIG);
@@ -194,6 +195,13 @@ static void do_client_clipboard(struct vdagent_virtio_port *vport,
         return;
     }
 
+    if (!VD_AGENT_HAS_CAPABILITY(capabilities, capabilities_size,
+                                 VD_AGENT_CAP_ANY_SELECTION_TYPE)) {
+        syslog(LOG_WARNING,
+               "The client lacks capability any selection type, discarded");
+        return;
+    }
+
     if (VD_AGENT_HAS_CAPABILITY(capabilities, capabilities_size,
                                 VD_AGENT_CAP_CLIPBOARD_SELECTION)) {
       selection = data[0];
@@ -206,26 +214,14 @@ static void do_client_clipboard(struct vdagent_virtio_port *vport,
         msg_type = VDAGENTD_CLIPBOARD_GRAB;
         agent_owns_clipboard[selection] = 0;
         break;
-    case VD_AGENT_CLIPBOARD_REQUEST: {
-        VDAgentClipboardRequest *req = (VDAgentClipboardRequest *)data;
+    case VD_AGENT_CLIPBOARD_REQUEST:
         msg_type = VDAGENTD_CLIPBOARD_REQUEST;
-        data_type = req->type;
-        data = NULL;
-        size = 0;
         break;
-    }
-    case VD_AGENT_CLIPBOARD: {
-        VDAgentClipboard *clipboard = (VDAgentClipboard *)data;
+    case VD_AGENT_CLIPBOARD:
         msg_type = VDAGENTD_CLIPBOARD_DATA;
-        data_type = clipboard->type;
-        size = size - sizeof(VDAgentClipboard);
-        data = clipboard->data;
         break;
-    }
     case VD_AGENT_CLIPBOARD_RELEASE:
         msg_type = VDAGENTD_CLIPBOARD_RELEASE;
-        data = NULL;
-        size = 0;
         break;
     }
 
@@ -328,15 +324,12 @@ size_error:
 }
 
 static void virtio_write_clipboard(uint8_t selection, uint32_t msg_type,
-    uint32_t data_type, const uint8_t *data, uint32_t data_size)
+    const uint8_t *data, uint32_t data_size)
 {
     uint32_t size = data_size;
 
     if (VD_AGENT_HAS_CAPABILITY(capabilities, capabilities_size,
                                 VD_AGENT_CAP_CLIPBOARD_SELECTION)) {
-        size += 4;
-    }
-    if (data_type != -1) {
         size += 4;
     }
 
@@ -348,9 +341,6 @@ static void virtio_write_clipboard(uint8_t selection, uint32_t msg_type,
         uint8_t sel[4] = { selection, 0, 0, 0 };
         vdagent_virtio_port_write_append(virtio_port, sel, 4);
     }
-    if (data_type != -1) {
-        vdagent_virtio_port_write_append(virtio_port, (uint8_t*)&data_type, 4);
-    }
 
     vdagent_virtio_port_write_append(virtio_port, data, data_size);
 }
@@ -360,10 +350,13 @@ int do_agent_clipboard(struct udscs_connection *conn,
         struct udscs_message_header *header, const uint8_t *data)
 {
     uint8_t selection = header->arg1;
-    uint32_t msg_type = 0, data_type = -1, size = header->size;
+    uint32_t msg_type = 0, size = header->size;
 
     if (!VD_AGENT_HAS_CAPABILITY(capabilities, capabilities_size,
                                  VD_AGENT_CAP_CLIPBOARD_BY_DEMAND))
+        goto error;
+    if (!VD_AGENT_HAS_CAPABILITY(capabilities, capabilities_size,
+                                 VD_AGENT_CAP_ANY_SELECTION_TYPE))
         goto error;
 
     /* Check that this agent is from the currently active session */
@@ -392,22 +385,18 @@ int do_agent_clipboard(struct udscs_connection *conn,
         break;
     case VDAGENTD_CLIPBOARD_REQUEST:
         msg_type = VD_AGENT_CLIPBOARD_REQUEST;
-        data_type = header->arg2;
-        size = 0;
         break;
     case VDAGENTD_CLIPBOARD_DATA:
         msg_type = VD_AGENT_CLIPBOARD;
-        data_type = header->arg2;
         if (max_clipboard != -1 && size > max_clipboard) {
             syslog(LOG_WARNING, "clipboard is too large (%d > %d), discarding",
                    size, max_clipboard);
-            virtio_write_clipboard(selection, msg_type, data_type, NULL, 0);
+            virtio_write_clipboard(selection, msg_type, NULL, 0);
             return 0;
         }
         break;
     case VDAGENTD_CLIPBOARD_RELEASE:
         msg_type = VD_AGENT_CLIPBOARD_RELEASE;
-        size = 0;
         agent_owns_clipboard[selection] = 0;
         break;
     default:
@@ -415,13 +404,7 @@ int do_agent_clipboard(struct udscs_connection *conn,
         goto error;
     }
 
-    if (size != header->size) {
-        syslog(LOG_ERR,
-               "unexpected extra data in clipboard msg, disconnecting agent");
-        return -1;
-    }
-
-    virtio_write_clipboard(selection, msg_type, data_type, data, header->size);
+    virtio_write_clipboard(selection, msg_type, data, header->size);
 
     return 0;
 

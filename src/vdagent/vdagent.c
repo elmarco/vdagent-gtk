@@ -221,6 +221,9 @@ dispatch_message(SpiceVDAgent *agent)
 {
     VDAgentdHeader *header = &agent->header;
     gpointer data = agent->data;
+    gchar *type = NULL;
+    GStrv types = NULL;
+    gssize pos = 0;
 
     switch (header->type) {
     case VDAGENTD_MONITORS_CONFIG:
@@ -232,15 +235,16 @@ dispatch_message(SpiceVDAgent *agent)
         g_warning("file-xfer is deprecated");
         break;
     case VDAGENTD_CLIPBOARD_REQUEST:
-        vdagent_clipboard_request(agent, header->arg1, header->arg2);
+        type = str_from_data(data, header->size, &pos);
+        vdagent_clipboard_request(agent, header->arg1, type);
         break;
     case VDAGENTD_CLIPBOARD_GRAB:
-        vdagent_clipboard_grab(agent, header->arg1,
-                               (guint32*)data, header->size / sizeof(guint32));
+        types = strv_from_data(data, header->size, &pos);
+        vdagent_clipboard_grab(agent, header->arg1, types);
         break;
     case VDAGENTD_CLIPBOARD_DATA:
-        vdagent_clipboard_data(agent, header->arg1, header->arg2,
-                             data, header->size);
+        type = str_from_data(data, header->size, &pos);
+        vdagent_clipboard_data(agent, header->arg1, type, data + pos, header->size - pos);
         break;
     case VDAGENTD_CLIPBOARD_RELEASE:
         vdagent_clipboard_release(agent, header->arg1);
@@ -258,6 +262,9 @@ dispatch_message(SpiceVDAgent *agent)
     default:
         g_warning("Unknown message from vdagentd type: %d, ignoring", header->type);
     }
+
+    g_free(type);
+    g_strfreev(types);
 }
 
 static void

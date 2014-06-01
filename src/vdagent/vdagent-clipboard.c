@@ -21,49 +21,6 @@
 
 #include "vdagent-clipboard.h"
 
-static const struct {
-    uint32_t    vdagent;
-    const char  *xatom;
-} atom2agent[] = {
-    {
-        .vdagent = VD_AGENT_CLIPBOARD_UTF8_TEXT,
-        .xatom   = "UTF8_STRING",
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_UTF8_TEXT,
-        .xatom   = "text/plain;charset=utf-8"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_UTF8_TEXT,
-        .xatom   = "STRING"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_UTF8_TEXT,
-        .xatom   = "TEXT"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_UTF8_TEXT,
-        .xatom   = "text/plain"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_IMAGE_PNG,
-        .xatom   = "image/png"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_IMAGE_BMP,
-        .xatom   = "image/bmp"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_IMAGE_BMP,
-        .xatom   = "image/x-bmp"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_IMAGE_BMP,
-        .xatom   = "image/x-MS-bmp"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_IMAGE_BMP,
-        .xatom   = "image/x-win-bitmap"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_IMAGE_TIFF,
-        .xatom   = "image/tiff"
-    },{
-        .vdagent = VD_AGENT_CLIPBOARD_IMAGE_JPG,
-        .xatom   = "image/jpeg"
-    }
-};
-
 static GtkClipboard*
 clipboard_get(GdkAtom selection)
 {
@@ -102,24 +59,6 @@ get_selection_from_clipboard(GtkClipboard* cb)
         return VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD;
 
     g_return_val_if_reached(-1);
-}
-
-
-static GdkAtom
-target_atom(guint32 type)
-{
-    GdkAtom atom;
-    int m;
-
-    for (m = 0; m < G_N_ELEMENTS(atom2agent); m++) {
-        if (atom2agent[m].vdagent == type)
-            break;
-    }
-
-    g_return_val_if_fail(m < G_N_ELEMENTS(atom2agent), GDK_NONE);
-
-    atom = gdk_atom_intern_static_string(atom2agent[m].xatom);
-    return atom;
 }
 
 typedef struct _WeakRef {
@@ -161,10 +100,7 @@ received_cb(GtkClipboard *clipboard,
     if (agent == NULL)
         return;
 
-    gint len = 0, m;
-    guint32 type = VD_AGENT_CLIPBOARD_NONE;
-    gchar* name;
-    GdkAtom atom;
+    gint len = 0;
     int selection;
     int max_clipboard = -1;
 
@@ -180,39 +116,34 @@ received_cb(GtkClipboard *clipboard,
         g_debug("empty clipboard");
         len = 0;
     } else {
-        atom = gtk_selection_data_get_data_type(selection_data);
-        name = gdk_atom_name(atom);
-        for (m = 0; m < G_N_ELEMENTS(atom2agent); m++) {
-            if (!g_strcmp0(name, atom2agent[m].xatom))
-                break;
-        }
-
-        if (m >= G_N_ELEMENTS(atom2agent)) {
-            g_warning("clipboard_received for unsupported type: %s", name);
-        } else {
-            type = atom2agent[m].vdagent;
-        }
-
-        g_free(name);
     }
 
-    spice_vdagent_write(agent, VDAGENTD_CLIPBOARD_DATA, selection, type,
-                        gtk_selection_data_get_data(selection_data), len);
+    gchar *target = gdk_atom_name(gtk_selection_data_get_target(selection_data));
+    gchar *data = g_malloc(len);
+    memcpy(data, gtk_selection_data_get_data(selection_data), len);
+
+    spice_vdagent_write_header(agent, VDAGENTD_CLIPBOARD_DATA, selection, 0,
+                               len + strlen(target) + 1);
+    spice_vdagent_write(agent, target, strlen(target) + 1, g_free);
+
+    spice_vdagent_write(agent, data, len, g_free);
 }
 
 
 void
-vdagent_clipboard_request(SpiceVDAgent *agent, guint8 selection, guint32 type)
+vdagent_clipboard_request(SpiceVDAgent *agent, guint8 selection,
+                          const gchar *type)
 {
     GtkClipboard *clipboard;
     GdkAtom selat, target;
 
+    g_debug("client clipboard request");
     g_return_if_fail(SPICE_IS_VDAGENT(agent));
 
     selat = selection_atom(selection);
-    target = target_atom(type);
+    target = gdk_atom_intern(type, FALSE);
     if (selat == GDK_NONE || target == GDK_NONE) {
-        g_debug("unknown selection:%d or target:%d", selection, type);
+        g_debug("unknown selection:%d or target:%s", selection, type);
         goto none;
     }
 
@@ -228,8 +159,7 @@ vdagent_clipboard_request(SpiceVDAgent *agent, guint8 selection, guint32 type)
     return;
 
 none:
-    spice_vdagent_write(agent, VDAGENTD_CLIPBOARD_DATA,
-                        selection, VD_AGENT_CLIPBOARD_NONE, NULL, 0);
+    spice_vdagent_write_header(agent, VDAGENTD_CLIPBOARD_DATA, selection, 0, 0);
 }
 
 static void
@@ -245,12 +175,11 @@ clipboard_get_cb(GtkClipboard *clipboard,
 
     g_return_if_fail(selection != -1);
 
-    spice_vdagent_write(agent, VDAGENTD_CLIPBOARD_REQUEST,
-                        selection, atom2agent[info].vdagent,
-                        NULL, 0);
+    gchar *target = gdk_atom_name(gtk_selection_data_get_target(selection_data));
+    spice_vdagent_write_msg(agent, VDAGENTD_CLIPBOARD_REQUEST,
+                            selection, 0, target, strlen(target) + 1, g_free);
 
     agent->clipboard_get.selection_data = selection_data;
-    agent->clipboard_get.info = info;
     agent->clipboard_get.loop = g_main_loop_new(NULL, FALSE);
     agent->clipboard_get.selection = selection;
 
@@ -261,16 +190,17 @@ clipboard_get_cb(GtkClipboard *clipboard,
 }
 
 void
-vdagent_clipboard_data(SpiceVDAgent *agent, guint8 selection, guint32 types,
+vdagent_clipboard_data(SpiceVDAgent *agent, guint8 selection,
+                       const gchar *type,
                        gpointer data, gsize size)
 {
     g_return_if_fail(SPICE_IS_VDAGENT(agent));
     g_return_if_fail(agent->clipboard_get.loop != NULL);
 
-    g_debug("clipboard data");
+    g_debug("client clipboard data");
 
     gtk_selection_data_set(agent->clipboard_get.selection_data,
-                           gdk_atom_intern_static_string(atom2agent[agent->clipboard_get.info].xatom),
+                           gdk_atom_intern(type, FALSE),
                            8, data, size);
 
     g_main_loop_quit(agent->clipboard_get.loop);
@@ -278,16 +208,20 @@ vdagent_clipboard_data(SpiceVDAgent *agent, guint8 selection, guint32 types,
 
 void
 vdagent_clipboard_grab(SpiceVDAgent *agent, guint8 selection,
-                       guint32 *types, gsize ntypes)
+                       const GStrv types)
 {
-    GtkTargetEntry targets[G_N_ELEMENTS(atom2agent)];
-    gboolean target_selected[G_N_ELEMENTS(atom2agent)] = { FALSE, };
-    gboolean found;
+    GtkTargetEntry *targets;
     GtkClipboard* clipboard;
     GdkAtom selat;
-    int m, n, i;
+    int n, i, j;
 
+    g_debug("client clipboard grab");
     g_return_if_fail(SPICE_IS_VDAGENT(agent));
+    g_return_if_fail(types);
+
+    g_debug("selection grab %u", selection);
+    for (i = 0; types[i]; i++)
+        g_debug("%s", types[i]);
 
     selat = selection_atom(selection);
     if (selat == GDK_NONE) {
@@ -298,31 +232,25 @@ vdagent_clipboard_grab(SpiceVDAgent *agent, guint8 selection,
     clipboard = clipboard_get(selat);
     g_return_if_fail(clipboard != NULL);
 
-    i = 0;
-    for (n = 0; n < ntypes; ++n) {
-        found = FALSE;
-        for (m = 0; m < G_N_ELEMENTS(atom2agent); m++) {
-            if (atom2agent[m].vdagent == types[n] && !target_selected[m]) {
-                found = TRUE;
-                g_return_if_fail(i < G_N_ELEMENTS(atom2agent));
-                targets[i].target = (gchar*)atom2agent[m].xatom;
-                targets[i].info = m;
-                target_selected[m] = TRUE;
-                i += 1;
-            }
-        }
-        if (!found) {
-            g_warning("couldn't find a matching type for: %d", types[n]);
-        }
+    n = g_strv_length(types);
+    targets = g_new0(GtkTargetEntry, n);
+    for (i = 0, j = 0; i < n; i++) {
+        if (!strcmp(types[i], "TARGETS"))
+            continue;
+
+        targets[j].target = types[i];
+        targets[j].info = j;
+        j++;
     }
 
-    if (!gtk_clipboard_set_with_owner(clipboard, targets, i,
+    if (!gtk_clipboard_set_with_owner(clipboard, targets, j,
                                       clipboard_get_cb, NULL, G_OBJECT(agent))) {
         g_warning("clipboard grab failed");
-        return;
+    } else {
+        agent->clipboard_owner[selection] = OWNER_CLIENT;
     }
 
-    agent->clipboard_owner[selection] = OWNER_CLIENT;
+    g_free(targets);
 }
 
 void
@@ -332,6 +260,7 @@ vdagent_clipboard_release(SpiceVDAgent *agent, guint8 selection)
     GdkAtom selat;
 
     g_return_if_fail(SPICE_IS_VDAGENT(agent));
+    g_debug("client clipboard release");
 
     selat = selection_atom(selection);
     if (selat == GDK_NONE) {
@@ -339,10 +268,8 @@ vdagent_clipboard_release(SpiceVDAgent *agent, guint8 selection)
         return;
     }
 
-    if (agent->clipboard_owner[selection] != OWNER_GUEST) {
-        g_debug("received clipboard release while not owning guest clipboard");
+    if (agent->clipboard_owner[selection] == OWNER_GUEST)
         return;
-    }
 
     clipboard = clipboard_get(selat);
     gtk_clipboard_clear(clipboard);
@@ -375,10 +302,10 @@ got_targets(GtkClipboard *clipboard,
     if (!self)
         return;
 
-    guint32 types[G_N_ELEMENTS(atom2agent)];
     char *name;
-    int a, m, t;
-    int selection;
+    int a, selection;
+    gsize size = 2;
+    GStrv targets = g_new0(gchar*, n_atoms + 1);
 
     selection = get_selection_from_clipboard(clipboard);
     g_return_if_fail(selection != -1);
@@ -386,45 +313,20 @@ got_targets(GtkClipboard *clipboard,
     for (a = 0; a < n_atoms; a++) {
         name = gdk_atom_name(atoms[a]);
         g_debug(" \"%s\"", name);
-        g_free(name);
+        targets[a] = name;
+        size += strlen(name) + 1;
     }
 
-    memset(types, 0, sizeof(types));
-    for (a = 0; a < n_atoms; a++) {
-        name = gdk_atom_name(atoms[a]);
-        for (m = 0; m < G_N_ELEMENTS(atom2agent); m++) {
-            if (g_strcmp0(name, atom2agent[m].xatom)) {
-                continue;
-            }
-            /* found match */
-            for (t = 0; t < G_N_ELEMENTS(atom2agent); t++) {
-                if (types[t] == atom2agent[m].vdagent) {
-                    /* type already in list */
-                    break;
-                }
-                if (types[t] == 0) {
-                    /* add type to empty slot */
-                    types[t] = atom2agent[m].vdagent;
-                    break;
-                }
-            }
-            break;
-        }
-        g_free(name);
-    }
-    for (t = 0; t < G_N_ELEMENTS(atom2agent); t++) {
-        if (types[t] == 0) {
-            break;
-        }
-    }
+    spice_vdagent_write_header(self, VDAGENTD_CLIPBOARD_GRAB,
+                               selection, 0, size);
 
-    if (t == 0)
-        return;
+    for (a = 0; a < n_atoms; a++)
+        spice_vdagent_write(self, targets[a], strlen(targets[a]) + 1, g_free);
 
-    spice_vdagent_write(self,
-                        VDAGENTD_CLIPBOARD_GRAB, selection, 0,
-                        (guint8*)types, t * sizeof(guint32));
+    spice_vdagent_write(self, "\0\0", 2, NULL);
+
     self->clipboard_owner[selection] = OWNER_GUEST;
+    g_free(targets);
 }
 
 static void
@@ -437,8 +339,11 @@ owner_change(GtkClipboard        *clipboard,
 
     g_return_if_fail(SPICE_IS_VDAGENT(self));
 
-    if (self->clipboard_owner[selection] == OWNER_CLIENT)
-        vdagent_clipboard_release(self, selection);
+    if (self->clipboard_owner[selection] == OWNER_GUEST) {
+        g_debug("sending release");
+        spice_vdagent_write_header(self, VDAGENTD_CLIPBOARD_RELEASE, selection, 0, 0);
+        self->clipboard_owner[selection] = OWNER_NONE;
+    }
 
     switch (event->reason) {
     case GDK_OWNER_CHANGE_NEW_OWNER:
