@@ -95,9 +95,14 @@ typedef struct _SpiceVDAgentClass {
 
 GType spice_vdagent_get_type(void);
 
-void spice_vdagent_write(SpiceVDAgent *agent,
-                         guint32 type, guint32 arg1, guint32 arg2,
-                         gconstpointer data, guint32 size);
+void spice_vdagent_write            (SpiceVDAgent *self,
+                                     gpointer data, guint32 size,
+                                     GFreeFunc free_func);
+void spice_vdagent_write_header     (SpiceVDAgent *self,
+                                     guint32 type, guint32 arg1, guint32 arg2, guint32 size);
+void spice_vdagent_write_msg        (SpiceVDAgent *self,
+                                     guint32 type, guint32 arg1, guint32 arg2,
+                                     gpointer data, guint32 size, GFreeFunc free_func);
 
 G_END_DECLS
 

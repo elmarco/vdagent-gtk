@@ -85,8 +85,9 @@ static void spice_vdagent_class_init(SpiceVDAgentClass *klass)
 }
 
 typedef struct _Msg {
-    VDAgentdHeader header;
-    guint8 data[];
+    gsize size;
+    guint8 *data;
+    GFreeFunc free_func;
 } Msg;
 
 static void kick_write(SpiceVDAgent *self);
@@ -99,12 +100,10 @@ msg_write_cb(GObject *source_object,
     SpiceVDAgent *self = SPICE_VDAGENT(user_data);
     GError *error = NULL;
     Msg *msg;
-    gssize ret, msg_size;
+    gssize ret;
 
     msg = g_queue_peek_head(self->outq);
     g_return_if_fail(msg != NULL);
-
-    msg_size = msg->header.size + sizeof(Msg);
 
     ret = g_output_stream_write_finish(G_OUTPUT_STREAM(source_object), res, &error);
     self->writing = FALSE;
@@ -114,11 +113,13 @@ msg_write_cb(GObject *source_object,
         g_clear_error(&error);
     } else {
         self->pos += ret;
-        g_assert(self->pos <= msg_size);
+        g_assert(self->pos <= msg->size);
 
-        g_debug("wrote %" G_GSSIZE_FORMAT "/%" G_GSSIZE_FORMAT, self->pos,  msg_size);
-        if (self->pos == msg_size) {
-            g_free(g_queue_pop_head(self->outq));
+        g_debug("wrote %" G_GSSIZE_FORMAT "/%" G_GSSIZE_FORMAT, self->pos,  msg->size);
+        if (self->pos == msg->size) {
+            if (msg->free_func)
+                msg->free_func(msg->data);
+            g_slice_free(Msg, g_queue_pop_head(self->outq));
             self->pos = 0;
         }
         kick_write(self);
@@ -134,8 +135,8 @@ kick_write(SpiceVDAgent *self)
         return;
 
     GOutputStream *out = g_io_stream_get_output_stream(self->connection);
-    g_output_stream_write_async(out, (char*)msg + self->pos,
-                                msg->header.size + sizeof(Msg) - self->pos,
+    g_output_stream_write_async(out, msg->data + self->pos,
+                                msg->size - self->pos,
                                 G_PRIORITY_DEFAULT, self->cancellable,
                                 msg_write_cb, self);
     self->writing = TRUE;
@@ -143,22 +144,49 @@ kick_write(SpiceVDAgent *self)
 
 void
 spice_vdagent_write(SpiceVDAgent *self,
-                    guint32 type, guint32 arg1, guint32 arg2,
-                    gconstpointer data, guint32 size)
+                    gpointer data, guint32 size,
+                    GFreeFunc free_func)
 {
-    Msg *msg;
-
     g_return_if_fail(SPICE_IS_VDAGENT(self));
+    g_return_if_fail(data && size);
 
-    msg = g_malloc(sizeof(Msg) + size);
-    msg->header.type = type;
-    msg->header.arg1 = arg1;
-    msg->header.arg2 = arg2;
-    msg->header.size = size;
-    memcpy(msg->data, data, size);
+    Msg *msg = g_slice_new(Msg);
+
+    msg->size = size;
+    msg->data = data;
+    msg->free_func = free_func;
 
     g_queue_push_tail(self->outq, msg);
     kick_write(self);
+}
+
+void
+spice_vdagent_write_header(SpiceVDAgent *self,
+                           guint32 type, guint32 arg1, guint32 arg2, guint32 size)
+{
+    g_return_if_fail(SPICE_IS_VDAGENT(self));
+
+    VDAgentdHeader *header = g_new(VDAgentdHeader, 1);
+    header->type = type;
+    header->arg1 = arg1;
+    header->arg2 = arg2;
+    header->size = size;
+
+    spice_vdagent_write(self, header, sizeof(*header), g_free);
+}
+
+void
+spice_vdagent_write_msg(SpiceVDAgent *self,
+                        guint32 type, guint32 arg1, guint32 arg2,
+                        gpointer data, guint32 size, GFreeFunc free_func)
+{
+
+    g_return_if_fail(SPICE_IS_VDAGENT(self));
+
+    spice_vdagent_write_header(self, type, arg1, arg2, size);
+
+    if (size)
+        spice_vdagent_write(self, data, size, free_func);
 }
 
 typedef struct _VDAgentdRes {
@@ -183,10 +211,9 @@ send_xorg_config(SpiceVDAgent *self)
         res[i].y = mon.y;
     }
 
-    spice_vdagent_write(self, VDAGENTD_GUEST_XORG_RESOLUTION,
-                        gdk_screen_width(), gdk_screen_height(),
-                        res, sizeof(*res) * nres);
-    g_free(res);
+    spice_vdagent_write_msg(self, VDAGENTD_GUEST_XORG_RESOLUTION,
+                            gdk_screen_width(), gdk_screen_height(),
+                            res, sizeof(*res) * nres, g_free);
 }
 
 static void
