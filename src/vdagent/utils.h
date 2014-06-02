@@ -44,6 +44,9 @@ input_stream_read_all_finish (GInputStream *stream,
                               gsize        *bytes_read,
                               GError      **error);
 
+gchar* str_from_data(char *data, gsize len, gssize *pos);
+GStrv strv_from_data(char *data, gsize len, gssize *pos);
+
 G_END_DECLS
 
 #endif

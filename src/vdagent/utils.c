@@ -24,6 +24,65 @@
 #include <syslog.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+GStrv strv_from_data(char *data, gsize len, gssize *pos)
+{
+    GStrv strv;
+    gssize i, n;
+
+    g_return_val_if_fail(len >= 2, NULL);
+
+    for (i = 0, n = 0; i < len; i++) {
+        if (data[i])
+            continue;
+
+        if (i >= 1 && !data[i-1])
+            break;
+        n++;
+    }
+
+    g_return_val_if_fail(i < len, NULL);
+
+    strv = g_new0(gchar *, n + 1);
+    strv[n] = NULL;
+
+    for (i = 0, n = 0; i < len; i++) {
+        if (!data[i] && i >= 1 && !data[i-1])
+            break;
+
+        if (!strv[n])
+            strv[n] = g_strndup(data + i, len - i);
+
+        if (!data[i])
+            n++;
+    }
+
+    if (pos)
+        *pos = i + 1;
+
+    return strv;
+}
+
+gchar* str_from_data(char *data, gsize len, gssize *pos)
+{
+    gchar *str;
+    int i;
+
+    g_return_val_if_fail(len >= 1, NULL);
+
+    for (i = 0; i < len; i++)
+        if (!data[i])
+            break;
+
+    g_return_val_if_fail(i < len, NULL);
+
+    str = g_strdup(data);
+    if (pos)
+        *pos = strlen(str) + 1;
+
+    return str;
+}
 
 static void
 log_handler(const gchar *log_domain, GLogLevelFlags log_level,
