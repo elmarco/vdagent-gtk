@@ -62,11 +62,6 @@ if test "x$init_systemd" = "xyes"; then
   AC_SUBST(SYSTEMDSYSTEMUNITDIR)
 fi
 
-AC_ARG_ENABLE([pciaccess],
-              [AS_HELP_STRING([--enable-pciaccess], [Enable libpciaccess use for auto generation of Xinerama xorg.conf (default: yes)])],
-              [enable_pciaccess="$enableval"],
-              [enable_pciaccess="yes"])
-
 AC_ARG_ENABLE([static-uinput],
               [AS_HELP_STRING([--enable-statis-uinput], [Enable use of a fixed, static uinput device for X-servers without hotplug support (default: no)])],
               [enable_static_uinput="$enableval"],
@@ -114,12 +109,6 @@ else
     have_console_kit="no"
 fi
 AM_CONDITIONAL(HAVE_CONSOLE_KIT, test x"$have_console_kit" = "xyes")
-
-if test x"$enable_pciaccess" = "xyes" ; then
-    PKG_CHECK_MODULES(PCIACCESS, [pciaccess >= 0.10])
-    AC_DEFINE([HAVE_PCIACCESS], [1], [If defined, vdagentd will be compiled with pciaccess support] )
-fi
-AM_CONDITIONAL(HAVE_PCIACCESS, test x"$enable_pciaccess" = "xyes")
 
 if test x"$enable_static_uinput" = "xyes" ; then
     AC_DEFINE([WITH_STATIC_UINPUT], [1], [If defined, vdagentd will use a static uinput device] )
@@ -192,7 +181,6 @@ AC_MSG_NOTICE([
         c compiler:               ${CC}
 
         session-info:             ${with_session_info}
-        pciaccess:                ${enable_pciaccess}
         static uinput:            ${enable_static_uinput}
         vdagentd pie + relro:     ${have_pie}
 

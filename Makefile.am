@@ -21,14 +21,14 @@ src_spice_vdagent_SOURCES =			\
 	src/vdagent/utils.h			\
 	$(NULL)
 
-src_spice_vdagentd_CFLAGS =							\
-	$(DBUS_CFLAGS) $(LIBSYSTEMD_LOGIN_CFLAGS)				\
-	$(PCIACCESS_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(PIE_CFLAGS)	\
-	-I$(srcdir)/src								\
+src_spice_vdagentd_CFLAGS =				\
+	$(DBUS_CFLAGS) $(LIBSYSTEMD_LOGIN_CFLAGS)	\
+	$(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(PIE_CFLAGS)	\
+	-I$(srcdir)/src					\
 	$(NULL)
-src_spice_vdagentd_LDADD =						\
-	$(DBUS_LIBS) $(LIBSYSTEMD_LOGIN_LIBS)				\
-	$(PCIACCESS_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS) $(PIE_LDFLAGS)	\
+src_spice_vdagentd_LDADD =				\
+	$(DBUS_LIBS) $(LIBSYSTEMD_LOGIN_LIBS)		\
+	$(SPICE_LIBS) $(GLIB2_LIBS) $(PIE_LDFLAGS)	\
 	$(NULL)
 src_spice_vdagentd_SOURCES =			\
 	src/vdagentd/udscs.c			\
