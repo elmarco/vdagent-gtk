@@ -1,11 +1,16 @@
-ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
 NULL =
+SUBDIRS = data src
 
 bin_PROGRAMS = src/spice-vdagent
 sbin_PROGRAMS = src/spice-vdagentd
 
-src_spice_vdagent_CFLAGS = $(X_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(GIO_CFLAGS) $(GTK_CFLAGS) -I$(srcdir)/src -DG_LOG_DOMAIN=\"vdagent\"
-src_spice_vdagent_LDADD = $(X_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS) $(GIO_LIBS) $(GTK_LIBS)
+src_spice_vdagent_CFLAGS =						\
+	$(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(GIO_CFLAGS) $(GTK_CFLAGS)	\
+	-I$(srcdir)/src -DG_LOG_DOMAIN=\"vdagent\" 			\
+	$(NULL)
+src_spice_vdagent_LDADD =					\
+	$(SPICE_LIBS) $(GLIB2_LIBS) $(GIO_LIBS) $(GTK_LIBS)	\
+	$(NULL)
 src_spice_vdagent_SOURCES =			\
 	$(common_sources)			\
 	src/vdagent/vdagent-clipboard.c		\
@@ -16,10 +21,15 @@ src_spice_vdagent_SOURCES =			\
 	src/vdagent/utils.h			\
 	$(NULL)
 
-src_spice_vdagentd_CFLAGS = $(DBUS_CFLAGS) $(LIBSYSTEMD_LOGIN_CFLAGS) \
-  $(PCIACCESS_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(PIE_CFLAGS) -I$(srcdir)/src
-src_spice_vdagentd_LDADD = $(DBUS_LIBS) $(LIBSYSTEMD_LOGIN_LIBS) \
-  $(PCIACCESS_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS) $(PIE_LDFLAGS)
+src_spice_vdagentd_CFLAGS =							\
+	$(DBUS_CFLAGS) $(LIBSYSTEMD_LOGIN_CFLAGS)				\
+	$(PCIACCESS_CFLAGS) $(SPICE_CFLAGS) $(GLIB2_CFLAGS) $(PIE_CFLAGS)	\
+	-I$(srcdir)/src								\
+	$(NULL)
+src_spice_vdagentd_LDADD =						\
+	$(DBUS_LIBS) $(LIBSYSTEMD_LOGIN_LIBS)				\
+	$(PCIACCESS_LIBS) $(SPICE_LIBS) $(GLIB2_LIBS) $(PIE_LDFLAGS)	\
+	$(NULL)
 src_spice_vdagentd_SOURCES =			\
 	src/vdagentd/udscs.c			\
 	src/vdagentd/udscs.h			\
@@ -95,3 +105,11 @@ EXTRA_DIST =					\
 DISTCHECK_CONFIGURE_FLAGS =			\
 	--with-init-script=redhat		\
 	$(NULL)
+
+MAINTAINERCLEANFILES =					\
+	$(GITIGNORE_MAINTAINERCLEANFILES_TOPLEVEL)	\
+	$(GITIGNORE_MAINTAINERCLEANFILES_MAKEFILE_IN)	\
+	$(GITIGNORE_MAINTAINERCLEANFILES_M4_LIBTOOL)	\
+	$(NULL)
+
+-include $(top_srcdir)/git.mk

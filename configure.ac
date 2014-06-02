@@ -1,19 +1,15 @@
 AC_PREREQ(2.59)
 AC_INIT([spice-vdagent], [1.0pre])
 AC_CONFIG_SRCDIR([configure.ac])
+AC_CONFIG_AUX_DIR([build-aux])
 
-AM_CONFIG_HEADER([src/config.h])
-
-AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip subdir-objects])
+AM_INIT_AUTOMAKE([foreign dist-xz no-dist-gzip subdir-objects])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
 AC_PROG_CC
 AM_PROG_CC_C_O
 AC_HEADER_STDC
 AC_PROG_INSTALL
-AC_PROG_LN_S
-AC_DEFINE(_GNU_SOURCE, [1], [Enable GNU extensions])
-PKG_PROG_PKG_CONFIG
 
 AC_ARG_WITH([session-info],
   [AS_HELP_STRING([--with-session-info=@<:@auto/console-kit/systemd/none@:>@],
@@ -177,6 +173,10 @@ fi
 
 AC_CONFIG_FILES([
 Makefile
+data/Makefile
+src/Makefile
+src/vdagent/Makefile
+src/vdagentd/Makefile
 data/spice-vdagent.1
 data/spice-vdagentd.1
 ])
