@@ -41,11 +41,13 @@ selection_atom(guint8 selection)
         return GDK_SELECTION_SECONDARY;
     if (selection == VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD)
         return GDK_SELECTION_CLIPBOARD;
+    if (selection == VD_AGENT_CLIPBOARD_SELECTION_DND)
+        return gdk_atom_intern("XdndSelection", FALSE);
 
     g_return_val_if_reached(GDK_NONE);
 }
 
-static gint
+static guint8
 get_selection_from_clipboard(GtkClipboard* cb)
 {
     GdkAtom selection;
@@ -57,8 +59,10 @@ get_selection_from_clipboard(GtkClipboard* cb)
         return VD_AGENT_CLIPBOARD_SELECTION_SECONDARY;
     if (selection == GDK_SELECTION_CLIPBOARD)
         return VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD;
+    if (selection == gdk_atom_intern("XdndSelection", FALSE))
+        return VD_AGENT_CLIPBOARD_SELECTION_DND;
 
-    g_return_val_if_reached(-1);
+    g_return_val_if_reached(0);
 }
 
 typedef struct _WeakRef {
@@ -101,11 +105,10 @@ received_cb(GtkClipboard *clipboard,
         return;
 
     gint len = 0;
-    int selection;
+    guint8 selection;
     int max_clipboard = -1;
 
     selection = get_selection_from_clipboard(clipboard);
-    g_return_if_fail(selection != -1);
 
     /* FIXME: get max_clipboard from agentd */
     len = gtk_selection_data_get_length(selection_data);
@@ -168,12 +171,10 @@ clipboard_get_cb(GtkClipboard *clipboard,
                  guint info, gpointer user_data)
 {
     SpiceVDAgent *agent = user_data;
-    gint selection = get_selection_from_clipboard(clipboard);
+    guint8 selection = get_selection_from_clipboard(clipboard);
 
     g_debug("clipboard get");
     g_return_if_fail(agent->clipboard_get.loop == NULL);
-
-    g_return_if_fail(selection != -1);
 
     gchar *target = gdk_atom_name(gtk_selection_data_get_target(selection_data));
     spice_vdagent_write_msg(agent, VDAGENTD_CLIPBOARD_REQUEST,
@@ -303,12 +304,12 @@ got_targets(GtkClipboard *clipboard,
         return;
 
     char *name;
-    int a, selection;
+    int a;
+    guint8 selection;
     gsize size = 2;
     GStrv targets = g_new0(gchar*, n_atoms + 1);
 
     selection = get_selection_from_clipboard(clipboard);
-    g_return_if_fail(selection != -1);
 
     for (a = 0; a < n_atoms; a++) {
         name = gdk_atom_name(atoms[a]);
@@ -335,7 +336,7 @@ owner_change(GtkClipboard        *clipboard,
              gpointer            user_data)
 {
     SpiceVDAgent *self = user_data;
-    gint selection = get_selection_from_clipboard(clipboard);
+    guint8 selection = get_selection_from_clipboard(clipboard);
 
     g_return_if_fail(SPICE_IS_VDAGENT(self));
 
@@ -367,6 +368,9 @@ vdagent_clipboard_init(SpiceVDAgent *self)
                      "owner-change",
                      G_CALLBACK(owner_change), self);
     g_signal_connect(G_OBJECT(clipboard_get(GDK_SELECTION_PRIMARY)),
+                     "owner-change",
+                     G_CALLBACK(owner_change), self);
+    g_signal_connect(G_OBJECT(clipboard_get(gdk_atom_intern("XdndSelection", FALSE))),
                      "owner-change",
                      G_CALLBACK(owner_change), self);
 }
